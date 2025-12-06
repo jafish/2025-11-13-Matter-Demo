@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>p5.js + Matter.js Physics Server</title>
+    <title>Multiplayer Room Starter</title>
     <meta charset="utf-8">
     <style>
         body {
@@ -15,6 +15,8 @@
             justify-content: center;
             min-height: 100vh;
         }
+
+        /* ====== JOIN SCREEN STYLES ====== */
         #joinScreen {
             background: rgba(255, 255, 255, 0.95);
             padding: 30px;
@@ -60,108 +62,121 @@
             margin-top: 10px;
             display: none;
         }
+
+        /* ====== GAME SCREEN STYLES ====== */
         #gameContainer {
             display: none;
+            width: 100%;
+            max-width: 1000px;
         }
-        #controls {
+        #roomInfo {
             background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
             margin-bottom: 15px;
             text-align: center;
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-            max-width: 800px;
         }
-        h2 {
-            margin: 0 0 15px 0;
+        #roomInfo h2 {
+            margin: 0 0 10px 0;
             color: #333;
-        }
-        #roomInfo {
-            background: #e3f2fd;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 15px;
-            font-size: 14px;
         }
         .player-name {
             display: inline-block;
             background: #4CAF50;
             color: white;
-            padding: 3px 8px;
-            margin: 2px;
-            border-radius: 3px;
-            font-size: 12px;
-        }
-        .button-row {
-            margin: 10px 0;
-        }
-        button {
-            padding: 12px 24px;
-            margin: 0 5px;
+            padding: 5px 10px;
+            margin: 3px;
+            border-radius: 5px;
             font-size: 14px;
-            cursor: pointer;
-            border: none;
-            border-radius: 6px;
-            background: #2196F3;
-            color: white;
-            transition: all 0.3s;
-            font-weight: bold;
         }
-        button:hover {
-            background: #0b7dda;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        #mainContent {
+            display: flex;
+            gap: 15px;
         }
-        button.circle {
-            background: #4CAF50;
-        }
-        button.circle:hover {
-            background: #45a049;
-        }
-        button.box {
-            background: #FF9800;
-        }
-        button.box:hover {
-            background: #e68900;
-        }
-        button.explode {
-            background: #f44336;
-        }
-        button.explode:hover {
-            background: #da190b;
-        }
-        button.clear {
-            background: #9E9E9E;
-        }
-        button.clear:hover {
-            background: #757575;
-        }
-        #info {
-            color: #666;
-            font-size: 12px;
-            margin-top: 10px;
-            line-height: 1.6;
-        }
-        .mode {
-            display: inline-block;
-            padding: 4px 10px;
-            margin: 5px;
-            background: #e3f2fd;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 11px;
+        #canvasContainer {
+            flex: 1;
         }
         canvas {
             border: 3px solid #333;
             box-shadow: 0 6px 30px rgba(0,0,0,0.6);
-            cursor: crosshair;
+            display: block;
+        }
+        #chatContainer {
+            width: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            display: flex;
+            flex-direction: column;
+        }
+        #chatContainer h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        #messageList {
+            flex: 1;
+            overflow-y: auto;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: white;
+            min-height: 400px;
+            max-height: 400px;
+        }
+        .message {
+            margin-bottom: 8px;
+            padding: 8px;
+            background: #f5f5f5;
+            border-radius: 5px;
+            word-wrap: break-word;
+        }
+        .message-username {
+            font-weight: bold;
+            color: #2196F3;
+            margin-right: 5px;
+        }
+        #messageInput {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        #messageInput:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        #sendBtn {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #sendBtn:hover {
+            background: #45a049;
+        }
+        .info-text {
+            color: #666;
+            font-size: 12px;
+            margin-top: 10px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <!-- Join Screen (shown first) -->
+    <!-- ====== JOIN SCREEN ====== -->
     <div id="joinScreen">
-        <h2>🎮 p5.js + Matter.js Physics Server</h2>
+        <h2>🎮 Multiplayer Room Starter</h2>
         <p>Enter your details to join a room (max 3 players per room)</p>
         <input type="text" id="usernameInput" placeholder="Your name" maxlength="20" required>
         <input type="text" id="roomInput" placeholder="Room name" maxlength="20" required>
@@ -169,27 +184,24 @@
         <div id="errorMessage"></div>
     </div>
 
-    <!-- Game Container (shown after joining) -->
+    <!-- ====== GAME SCREEN ====== -->
     <div id="gameContainer">
-        <div id="controls">
-            <h2>🎮 p5.js + Matter.js Physics Server</h2>
+        <div id="roomInfo">
+            <h2>🎮 Multiplayer Room Starter</h2>
+            <div id="roomDetails"></div>
+        </div>
 
-            <div id="roomInfo"></div>
-
-            <div class="button-row">
-                <button id="circleBtn" class="circle">🔵 Circle Mode</button>
-                <button id="boxBtn" class="box">🟧 Box Mode</button>
-                <button id="explodeBtn" class="explode">💥 Explode Mode</button>
+        <div id="mainContent">
+            <div id="canvasContainer">
+                <!-- p5.js canvas will be created here -->
             </div>
 
-            <div class="button-row">
-                <button id="clearBtn" class="clear">🗑️ Clear All</button>
-            </div>
-
-            <div id="info">
-                <strong>Current Mode:</strong> <span class="mode" id="currentMode">Circle</span><br>
-                <strong>Instructions:</strong> Click canvas to spawn objects or create explosions<br>
-                Matter.js physics runs on server @ 60 FPS | p5.js renders on client @ 60 FPS | Network @ 20 Hz
+            <div id="chatContainer">
+                <h3>💬 Room Chat</h3>
+                <div id="messageList"></div>
+                <input type="text" id="messageInput" placeholder="Type a message..." maxlength="200">
+                <button id="sendBtn">Send Message</button>
+                <div class="info-text">Messages are only visible to players in this room</div>
             </div>
         </div>
     </div>
@@ -200,27 +212,38 @@
     <!-- Load Socket.IO client from CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
 
-    <!-- p5.js sketch -->
+    <!-- Main client code -->
     <script>
-        // Connect to Socket.IO server
+        // ====================================================================
+        // SOCKET.IO CONNECTION
+        // ====================================================================
+        // Unlike the "echo server", we now have a custom server that
+        // manages rooms and decides what to broadcast to whom
         var socket = io();
 
-        // World dimensions
-        let worldWidth = 800;
-        let worldHeight = 600;
-
-        // Client-side body storage (rendering only)
-        let bodies = {};
-
-        // Interaction mode
-        let mode = 'circle'; // 'circle', 'box', or 'explode'
-
-        // Room state
+        // ====================================================================
+        // CLIENT STATE
+        // ====================================================================
         let username = '';
         let roomName = '';
         let inRoom = false;
+        let players = []; // List of player usernames in this room
 
-        // ====== JOIN ROOM LOGIC ======
+        // ====================================================================
+        // 🎓 STUDENT INSTRUCTIONS: GAME STATE
+        // ====================================================================
+        // Add your game state variables here! Examples:
+        //
+        // let playerPositions = {};  // Store each player's x,y position
+        // let gameObjects = [];      // Store game objects (coins, enemies, etc.)
+        // let scores = {};           // Track scores for each player
+        // let gameStarted = false;   // Whether the game has started
+        //
+        // ====================================================================
+
+        // ====================================================================
+        // JOIN ROOM LOGIC
+        // ====================================================================
 
         // Handle join button click
         document.getElementById('joinBtn').addEventListener('click', () => {
@@ -244,16 +267,29 @@
             if (e.key === 'Enter') document.getElementById('joinBtn').click();
         });
 
-        // Handle room full error
+        // Server rejected join (room is full)
         socket.on('roomFull', (data) => {
             showError(data.message);
         });
 
-        // Handle room info updates
+        // Server accepted join
+        socket.on('joinSuccess', (data) => {
+            if (!inRoom) {
+                inRoom = true;
+                document.getElementById('joinScreen').style.display = 'none';
+                document.getElementById('gameContainer').style.display = 'block';
+                console.log(`Successfully joined room: ${data.room}`);
+            }
+        });
+
+        // Update room info (player list)
         socket.on('roomInfo', (data) => {
-            const roomInfoDiv = document.getElementById('roomInfo');
+            players = data.players;
+
+            // Update the room details display
+            const roomDetailsDiv = document.getElementById('roomDetails');
             const playersList = data.players.map(p => `<span class="player-name">${p}</span>`).join(' ');
-            roomInfoDiv.innerHTML = `
+            roomDetailsDiv.innerHTML = `
                 <strong>Room:</strong> ${data.room} |
                 <strong>Players:</strong> ${data.playerCount}/${data.maxPlayers}<br>
                 ${playersList}
@@ -269,144 +305,208 @@
             }, 3000);
         }
 
-        // ====== P5.JS SETUP ======
+        // ====================================================================
+        // CHAT/MESSAGING SYSTEM
+        // ====================================================================
+
+        // Send message button
+        document.getElementById('sendBtn').addEventListener('click', () => {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (message) {
+                socket.emit('sendMessage', { message });
+                input.value = ''; // Clear input
+            }
+        });
+
+        // Send message with Enter key
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('sendBtn').click();
+            }
+        });
+
+        // Receive new message from server
+        socket.on('newMessage', (data) => {
+            const messageList = document.getElementById('messageList');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `
+                <span class="message-username">${data.username}:</span>
+                <span>${data.message}</span>
+            `;
+            messageList.appendChild(messageDiv);
+
+            // Auto-scroll to bottom
+            messageList.scrollTop = messageList.scrollHeight;
+        });
+
+        // ====================================================================
+        // 🎓 STUDENT INSTRUCTIONS: ADDING SOCKET EVENTS
+        // ====================================================================
+        //
+        // To communicate with the server, use this pattern:
+        //
+        // SEND to server:
+        //   socket.emit('eventName', { data: value });
+        //
+        // RECEIVE from server:
+        //   socket.on('eventName', (data) => {
+        //       // Handle the data
+        //   });
+        //
+        // Example - sending player position:
+        //   socket.emit('updatePosition', { x: mouseX, y: mouseY });
+        //
+        // Example - receiving game state:
+        //   socket.on('gameState', (state) => {
+        //       playerPositions = state.positions;
+        //       gameObjects = state.objects;
+        //   });
+        //
+        // Remember: The server decides what gets sent to other players!
+        // ====================================================================
+
+        // ====================================================================
+        // P5.JS SETUP AND DRAW
+        // ====================================================================
 
         function setup() {
-            createCanvas(worldWidth, worldHeight);
-            frameRate(60);
+            // Create a canvas and attach it to the canvasContainer
+            let canvas = createCanvas(600, 500);
+            canvas.parent('canvasContainer');
 
-            // Receive initial world state (triggered after joining room)
-            socket.on('worldState', (data) => {
-                worldWidth = data.width;
-                worldHeight = data.height;
-                bodies = {};
-                data.bodies.forEach(bodyData => {
-                    bodies[bodyData.id] = bodyData;
-                });
-                console.log('World state received:', data);
-
-                // Switch to game screen
-                if (!inRoom) {
-                    inRoom = true;
-                    document.getElementById('joinScreen').style.display = 'none';
-                    document.getElementById('gameContainer').style.display = 'block';
-                }
-            });
-
-            // Receive physics updates from server
-            socket.on('physicsUpdate', (bodiesData) => {
-                bodies = {};
-                bodiesData.forEach(bodyData => {
-                    bodies[bodyData.id] = bodyData;
-                });
-            });
-
-            // Receive notification of new body
-            socket.on('bodySpawned', (bodyData) => {
-                bodies[bodyData.id] = bodyData;
-                console.log('Body spawned:', bodyData);
-            });
-
-            // Receive notification that all bodies were cleared
-            socket.on('bodiesCleared', () => {
-                bodies = {};
-                console.log('All bodies cleared');
-            });
+            // ================================================================
+            // 🎓 STUDENT INSTRUCTIONS: SETUP
+            // ================================================================
+            // Initialize your game here!
+            // - Load images/assets
+            // - Set up initial game state
+            // - Configure p5.js settings (frameRate, colorMode, etc.)
+            // ================================================================
         }
 
         function draw() {
-            // Background
-            background(20, 25, 40);
+            // Simple background
+            background(30, 35, 50);
 
-            // Draw subtle grid
-            stroke(40, 45, 60);
-            strokeWeight(1);
-            for (let x = 0; x < width; x += 50) {
-                line(x, 0, x, height);
-            }
-            for (let y = 0; y < height; y += 50) {
-                line(0, y, width, y);
-            }
-
-            // Draw all physics bodies using p5.js
-            push();
-            Object.values(bodies).forEach(body => {
-                push();
-                translate(body.x, body.y);
-                rotate(body.angle);
-
-                // Set color from server
-                fill(body.color);
-                stroke(255, 255, 255, 100);
-                strokeWeight(2);
-
-                // Draw based on type
-                if (body.type === 'circle') {
-                    ellipse(0, 0, body.radius * 2, body.radius * 2);
-                } else if (body.type === 'box') {
-                    rectMode(CENTER);
-                    rect(0, 0, body.width, body.height);
-                }
-
-                pop();
-
-                // Draw velocity vector (optional - shows physics)
-                stroke(255, 255, 0, 150);
-                strokeWeight(2);
-                line(body.x, body.y, body.x + body.vx * 2, body.y + body.vy * 2);
-            });
-            pop();
-
-            // Draw stats
-            noStroke();
-            fill(255, 255, 255, 200);
+            // Display player names on the canvas
+            fill(255);
             textAlign(LEFT, TOP);
+            textSize(16);
+            text('Players in room:', 20, 20);
+
+            let yPos = 45;
+            players.forEach((playerName, index) => {
+                fill(100, 200, 100);
+                text(`• ${playerName}`, 30, yPos);
+                yPos += 25;
+            });
+
+            // Simple instruction text
+            fill(150);
+            textAlign(CENTER, CENTER);
             textSize(14);
-            text(`Bodies: ${Object.keys(bodies).length}`, 10, 10);
-            text(`FPS: ${Math.round(frameRate())}`, 10, 30);
-            text(`Mode: ${mode}`, 10, 50);
+            text('This is your p5.js canvas!', width / 2, height / 2);
+            text('Add your game rendering code in the draw() function', width / 2, height / 2 + 25);
 
-            // Draw explosion preview in explode mode
-            if (mode === 'explode' && mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
-                noFill();
-                stroke(255, 100, 100, 100);
-                strokeWeight(3);
-                ellipse(mouseX, mouseY, 200, 200);
-            }
+            // ================================================================
+            // 🎓 STUDENT INSTRUCTIONS: DRAW LOOP
+            // ================================================================
+            // Add your game rendering here!
+            //
+            // This function runs 60 times per second (60 FPS)
+            //
+            // Examples:
+            // - Draw player sprites at their positions
+            // - Draw game objects (coins, enemies, etc.)
+            // - Draw score/health displays
+            // - Draw game boundaries
+            //
+            // You can access mouse position with: mouseX, mouseY
+            // You can check key presses with: keyIsDown(key_code)
+            // ================================================================
         }
 
-        // Handle mouse clicks
+        // ====================================================================
+        // 🎓 STUDENT INSTRUCTIONS: P5.JS INTERACTION
+        // ====================================================================
+        // Add your interaction handlers here!
+        //
+        // Common p5.js functions:
+        //
+        // function mousePressed() {
+        //     // Called once when mouse is clicked
+        //     // Example: Shoot a projectile, select an object, etc.
+        // }
+        //
+        // function keyPressed() {
+        //     // Called once when a key is pressed
+        //     // Example: Start game, open menu, etc.
+        // }
+        //
+        // Continuous input (check every frame in draw()):
+        //   if (keyIsDown(LEFT_ARROW)) { /* move left */ }
+        //   if (keyIsDown(RIGHT_ARROW)) { /* move right */ }
+        //   if (keyIsDown(32)) { /* spacebar - jump */ }
+        //
+        // ====================================================================
+
+        // Example: Mouse click handler
         function mousePressed() {
+            // Only detect clicks inside the canvas
             if (mouseX >= 0 && mouseX <= width && mouseY >= 0 && mouseY <= height) {
-                if (mode === 'circle') {
-                    socket.emit('spawnCircle', { x: mouseX, y: mouseY });
-                } else if (mode === 'box') {
-                    socket.emit('spawnBox', { x: mouseX, y: mouseY });
-                } else if (mode === 'explode') {
-                    socket.emit('explode', { x: mouseX, y: mouseY, radius: 100, power: 5 });  // Changed from 0.05
-                }
+                console.log(`Clicked at: (${mouseX}, ${mouseY})`);
+
+                // ============================================================
+                // 🎓 STUDENT INSTRUCTIONS: HANDLE CLICKS
+                // ============================================================
+                // Add your click handling here!
+                //
+                // Example - send click to server:
+                //   socket.emit('playerClick', { x: mouseX, y: mouseY });
+                //
+                // Example - spawn a local object:
+                //   gameObjects.push({ x: mouseX, y: mouseY, type: 'coin' });
+                // ============================================================
             }
         }
 
-        // Button handlers
-        document.getElementById('circleBtn').addEventListener('click', () => {
-            mode = 'circle';
-            document.getElementById('currentMode').textContent = 'Circle';
-        });
-
-        document.getElementById('boxBtn').addEventListener('click', () => {
-            mode = 'box';
-            document.getElementById('currentMode').textContent = 'Box';
-        });
-
-        document.getElementById('explodeBtn').addEventListener('click', () => {
-            mode = 'explode';
-            document.getElementById('currentMode').textContent = 'Explode';
-        });
-
-        document.getElementById('clearBtn').addEventListener('click', () => {
-            socket.emit('clearBodies');
-        });
+        // ====================================================================
+        // 🎓 STUDENT INSTRUCTIONS: HELPFUL TIPS
+        // ====================================================================
+        //
+        // CLIENT vs SERVER:
+        // - Client (this file): Handles rendering and user input
+        // - Server (server.js): Handles game logic and broadcasts updates
+        //
+        // ROOM ISOLATION:
+        // - Players in different rooms never see each other's data
+        // - The server uses io.to(room).emit() to send only to your room
+        //
+        // COMMON PATTERNS:
+        //
+        // 1. PLAYER MOVEMENT (client predicts, server validates)
+        //    Client: Move player immediately, send position to server
+        //    Server: Validate position, broadcast to all in room
+        //
+        // 2. GAME OBJECTS (server is source of truth)
+        //    Client: Request to create object
+        //    Server: Create object with unique ID, broadcast to all
+        //    Client: Render object when received
+        //
+        // 3. TURN-BASED GAMES
+        //    Server: Track whose turn it is
+        //    Client: Only allow actions when it's your turn
+        //    Server: Validate actions and update game state
+        //
+        // DEBUGGING:
+        // - Open browser console (F12) to see console.log() messages
+        // - Check server.js terminal to see server-side console.log()
+        // - Use console.log() frequently to understand data flow
+        //
+        // ====================================================================
     </script>
 </body>
 </html>

@@ -1,37 +1,42 @@
 'use strict';
 
+// ====== IMPORTS ======
 const express = require('express');
 const socketIO = require('socket.io');
 const path = require('path');
-const Matter = require('matter-js');
 
+// ====== SERVER SETUP ======
 const PORT = process.env.PORT || 3000;
 const INDEX = path.join(__dirname, 'index.html');
 
+// Create Express server and serve the HTML file
 const server = express()
     .use((req, res) => res.sendFile(INDEX))
     .listen(PORT, () => console.log(`Listening on ${PORT}`));
 
+// Attach Socket.IO to the server
 const io = socketIO(server);
 
-// ====== ROOM MANAGEMENT (3 Players Max) ======
+// ====== ROOM MANAGEMENT ======
+// Unlike the "echo server" you used before, we now manage ROOMS
+// Players in different rooms cannot see each other's messages/data
 
-const MAX_PLAYERS_PER_ROOM = 3;
-const users = [];
+const MAX_PLAYERS_PER_ROOM = 2; // Change this to allow more/fewer players per room
+const users = []; // Array to track all connected users: { id, username, room }
 
-// Helper function: Join user to room
+// Helper: Add a user to a room
 function userJoin(id, username, room) {
     const user = { id, username, room };
     users.push(user);
     return user;
 }
 
-// Helper function: Get the current user
+// Helper: Find a user by their socket ID
 function getCurrentUser(id) {
     return users.find(user => user.id === id);
 }
 
-// Helper function: User leaves room
+// Helper: Remove a user when they disconnect
 function userLeave(id) {
     const index = users.findIndex(user => user.id === id);
     if (index !== -1) {
@@ -39,218 +44,52 @@ function userLeave(id) {
     }
 }
 
-// Helper function: Get all users in a room
+// Helper: Get all users in a specific room
 function getRoomUsers(room) {
     return users.filter(user => user.room === room);
 }
 
-// ====== MATTER.JS PHYSICS ENGINE SETUP ======
-
-const Engine = Matter.Engine;
-const World = Matter.World;
-const Bodies = Matter.Bodies;
-const Body = Matter.Body;
-
-// World settings (shared constants)
-const WORLD_WIDTH = 800;
-const WORLD_HEIGHT = 600;
-
-// Store physics worlds per room
-const rooms = {}; // { roomName: { engine, world, bodies, nextBodyId } }
-
-// Helper function: Create a new physics world for a room
-function createRoomPhysics(roomName) {
-    // Create physics engine
-    const engine = Engine.create();
-    const world = engine.world;
-
-    // Set gravity
-    engine.world.gravity.y = 1; // Matter.js units (1 = normal Earth gravity)
-
-    // Create static walls
-    const wallThickness = 50;
-    const walls = [
-        Bodies.rectangle(WORLD_WIDTH / 2, -wallThickness / 2, WORLD_WIDTH, wallThickness, { isStatic: true }), // Top
-        Bodies.rectangle(WORLD_WIDTH / 2, WORLD_HEIGHT + wallThickness / 2, WORLD_WIDTH, wallThickness, { isStatic: true }), // Bottom
-        Bodies.rectangle(-wallThickness / 2, WORLD_HEIGHT / 2, wallThickness, WORLD_HEIGHT, { isStatic: true }), // Left
-        Bodies.rectangle(WORLD_WIDTH + wallThickness / 2, WORLD_HEIGHT / 2, wallThickness, WORLD_HEIGHT, { isStatic: true }) // Right
-    ];
-
-    World.add(world, walls);
-
-    // Create room object
-    rooms[roomName] = {
-        engine: engine,
-        world: world,
-        bodies: [], // Track dynamic bodies (circles and boxes)
-        nextBodyId: 0
-    };
-
-    console.log(`Physics world created for room: ${roomName}`);
-    return rooms[roomName];
-}
-
-// Helper function: Get room physics (creates if doesn't exist)
-function getRoomPhysics(roomName) {
-    if (!rooms[roomName]) {
-        return createRoomPhysics(roomName);
-    }
-    return rooms[roomName];
-}
-
-// Helper function: Delete room physics when empty
-function deleteRoomPhysics(roomName) {
-    if (rooms[roomName]) {
-        delete rooms[roomName];
-        console.log(`Physics world deleted for room: ${roomName}`);
-    }
-}
-
-// ====== HELPER FUNCTIONS (Room-Specific) ======
-
-function createCircle(roomName, x, y) {
-    const room = getRoomPhysics(roomName);
-
-    const radius = 15 + Math.random() * 25; // Random size 15-40
-    const circle = Bodies.circle(x, y, radius, {
-        restitution: 0.8, // Bounciness
-        friction: 0.01,
-        density: 0.001,
-        render: {
-            fillStyle: `rgb(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`
-        }
-    });
-
-    const bodyData = {
-        id: room.nextBodyId++,
-        matterId: circle.id,
-        type: 'circle',
-        radius: radius,
-        color: circle.render.fillStyle
-    };
-
-    World.add(room.world, circle);
-    room.bodies.push({ matter: circle, data: bodyData });
-
-    return bodyData;
-}
-
-function createBox(roomName, x, y) {
-    const room = getRoomPhysics(roomName);
-
-    const size = 20 + Math.random() * 40; // Random size 20-60
-    const box = Bodies.rectangle(x, y, size, size, {
-        restitution: 0.6,
-        friction: 0.05,
-        density: 0.001,
-        render: {
-            fillStyle: `rgb(${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)}, ${Math.floor(Math.random() * 256)})`
-        }
-    });
-
-    const bodyData = {
-        id: room.nextBodyId++,
-        matterId: box.id,
-        type: 'box',
-        width: size,
-        height: size,
-        color: box.render.fillStyle
-    };
-
-    World.add(room.world, box);
-    room.bodies.push({ matter: box, data: bodyData });
-
-    return bodyData;
-}
-
-function clearAllBodies(roomName) {
-    const room = rooms[roomName];
-    if (room) {
-        room.bodies.forEach(b => World.remove(room.world, b.matter));
-        room.bodies = [];
-    }
-}
-
-// Serialize physics state for clients
-function getPhysicsState(roomName) {
-    const room = rooms[roomName];
-    if (!room) return [];
-
-    return room.bodies.map(b => {
-        const matter = b.matter;
-        return {
-            id: b.data.id,
-            type: b.data.type,
-            x: matter.position.x,
-            y: matter.position.y,
-            angle: matter.angle,
-            vx: matter.velocity.x,
-            vy: matter.velocity.y,
-            angularVelocity: matter.angularVelocity,
-            radius: b.data.radius,
-            width: b.data.width,
-            height: b.data.height,
-            color: b.data.color
-        };
-    });
-}
-
-// ====== GAME LOOP (All Rooms) ======
-
-const TICK_RATE = 60; // 60 FPS physics simulation
-const UPDATE_RATE = 20; // Send updates to clients at 20 Hz
-
-// Physics update loop - updates all active room physics
-setInterval(() => {
-    Object.keys(rooms).forEach(roomName => {
-        const room = rooms[roomName];
-        Engine.update(room.engine, 1000 / TICK_RATE);
-    });
-}, 1000 / TICK_RATE);
-
-// Network update loop - sends updates to each room
-setInterval(() => {
-    Object.keys(rooms).forEach(roomName => {
-        const room = rooms[roomName];
-        if (room.bodies.length > 0) {
-            io.to(roomName).emit('physicsUpdate', getPhysicsState(roomName));
-        }
-    });
-}, 1000 / UPDATE_RATE);
-
-// ====== SOCKET.IO HANDLERS ======
+// ====== SOCKET.IO EVENT HANDLERS ======
+// This is where YOU control what happens when clients send events
+// Unlike the echo server (which automatically forwarded everything),
+// YOU decide what to do with each event and what to send back
 
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
 
-    // Handle room join request
+    // ====== EVENT: JOIN ROOM ======
+    // Client sends: { username, room }
+    // Server decides: Allow join or reject if room is full
     socket.on('joinRoom', ({ username, room }) => {
         console.log(`User ${username} attempting to join room: ${room}`);
 
-        // Check if room is full
+        // CHECK: Is the room full?
         if (getRoomUsers(room).length >= MAX_PLAYERS_PER_ROOM) {
+            // Send rejection message to THIS client only
             socket.emit('roomFull', {
                 message: `Room "${room}" is full! Maximum ${MAX_PLAYERS_PER_ROOM} players allowed.`
             });
             console.log(`Room ${room} is full. User ${username} rejected.`);
-            return;
+            return; // Stop here - don't let them join
         }
 
-        // Join the user to the room
+        // Add user to our tracking array
         const user = userJoin(socket.id, username, room);
+
+        // Join the Socket.IO room (this groups sockets together)
         socket.join(user.room);
 
-        // Create or get physics world for this room
-        getRoomPhysics(user.room);
-
-        // Send initial world state to the joining player
-        socket.emit('worldState', {
-            width: WORLD_WIDTH,
-            height: WORLD_HEIGHT,
-            bodies: getPhysicsState(user.room)
+        // Send success message to THIS client only
+        // IMPORTANT: socket.emit() sends to ONE client (this specific socket)
+        // Compare with io.to().emit() below which sends to ALL clients in room
+        socket.emit('joinSuccess', {
+            room: user.room,
+            username: user.username
         });
 
-        // Notify room about player count
+        // Broadcast updated room info to EVERYONE in this room
+        // IMPORTANT: io.to(room).emit() sends to ALL clients in that room
+        // Compare with socket.emit() above which sends to just ONE client
         const roomUsers = getRoomUsers(user.room);
         io.to(user.room).emit('roomInfo', {
             room: user.room,
@@ -262,67 +101,33 @@ io.on('connection', (socket) => {
         console.log(`${username} joined room ${room}. Players: ${roomUsers.length}/${MAX_PLAYERS_PER_ROOM}`);
     });
 
-    // Spawn circle
-    socket.on('spawnCircle', (data) => {
+    // ====== EVENT: SEND MESSAGE ======
+    // Client sends: { message }
+    // Server decides: Broadcast to everyone in the same room
+    socket.on('sendMessage', (data) => {
+        // Look up which user this socket belongs to
         const user = getCurrentUser(socket.id);
-        if (!user) return;
+        if (!user) return; // Safety check - user must be in a room
 
-        const bodyData = createCircle(user.room, data.x, data.y);
-        io.to(user.room).emit('bodySpawned', bodyData);
-        console.log(`Circle ${bodyData.id} spawned in room ${user.room} at (${data.x}, ${data.y})`);
-    });
-
-    // Spawn box
-    socket.on('spawnBox', (data) => {
-        const user = getCurrentUser(socket.id);
-        if (!user) return;
-
-        const bodyData = createBox(user.room, data.x, data.y);
-        io.to(user.room).emit('bodySpawned', bodyData);
-        console.log(`Box ${bodyData.id} spawned in room ${user.room} at (${data.x}, ${data.y})`);
-    });
-
-    // Apply explosion force
-    socket.on('explode', (data) => {
-        const user = getCurrentUser(socket.id);
-        if (!user) return;
-
-        const room = rooms[user.room];
-        if (!room) return;
-
-        room.bodies.forEach(b => {
-            const dx = b.matter.position.x - data.x;
-            const dy = b.matter.position.y - data.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < data.radius) {
-                const forceMagnitude = data.power / (distance + 1);
-                const forceX = (dx / distance) * forceMagnitude;
-                const forceY = (dy / distance) * forceMagnitude;
-                Body.applyForce(b.matter, b.matter.position, { x: forceX, y: forceY });
-            }
+        // Broadcast message to EVERYONE in this user's room (including sender)
+        io.to(user.room).emit('newMessage', {
+            username: user.username,
+            message: data.message,
+            timestamp: Date.now()
         });
-        console.log(`Explosion in room ${user.room} at (${data.x}, ${data.y})`);
+
+        console.log(`[${user.room}] ${user.username}: ${data.message}`);
     });
 
-    // Clear all bodies
-    socket.on('clearBodies', () => {
-        const user = getCurrentUser(socket.id);
-        if (!user) return;
-
-        clearAllBodies(user.room);
-        io.to(user.room).emit('bodiesCleared');
-        console.log(`All bodies cleared in room ${user.room}`);
-    });
-
-    // Handle disconnect
+    // ====== EVENT: DISCONNECT ======
+    // Automatically triggered when a client disconnects
     socket.on('disconnect', () => {
         const user = userLeave(socket.id);
 
         if (user) {
             console.log(`Client disconnected: ${user.username} from room ${user.room}`);
 
-            // Update room info
+            // Update everyone in the room about the new player list
             const roomUsers = getRoomUsers(user.room);
             io.to(user.room).emit('roomInfo', {
                 room: user.room,
@@ -330,14 +135,84 @@ io.on('connection', (socket) => {
                 maxPlayers: MAX_PLAYERS_PER_ROOM,
                 players: roomUsers.map(u => u.username)
             });
-
-            // If room is empty, delete the physics world
-            if (roomUsers.length === 0) {
-                deleteRoomPhysics(user.room);
-            }
         }
     });
+
+    // ====================================================================
+    // 🎓 STUDENT INSTRUCTIONS: HOW TO ADD NEW FEATURES
+    // ====================================================================
+    //
+    // To add a new feature, follow this pattern:
+    //
+    // 1. CLIENT sends an event:
+    //    socket.emit('yourEventName', { yourData: value });
+    //
+    // 2. SERVER receives and handles it:
+    //    socket.on('yourEventName', (data) => {
+    //        const user = getCurrentUser(socket.id);
+    //        if (!user) return;
+    //
+    //        // Process the data...
+    //
+    //        // Send to just this client:
+    //        socket.emit('responseEvent', { ... });
+    //
+    //        // OR send to everyone in this room:
+    //        io.to(user.room).emit('responseEvent', { ... });
+    //    });
+    //
+    // 3. CLIENT receives the response:
+    //    socket.on('responseEvent', (data) => {
+    //        // Update your UI or game state
+    //    });
+    //
+    // ====================================================================
+    // EXAMPLES OF FEATURES YOU COULD ADD:
+    // ====================================================================
+    //
+    // • Game state synchronization (positions, scores, etc.)
+    //   - Client sends position updates
+    //   - Server validates and broadcasts to room
+    //
+    // • Turn-based game logic
+    //   - Server tracks whose turn it is
+    //   - Server validates moves and updates game state
+    //
+    // • Scoring system
+    //   - Server maintains score for each player
+    //   - Server broadcasts score updates to room
+    //
+    // • Custom game objects (collectibles, obstacles, etc.)
+    //   - Server creates objects with unique IDs
+    //   - Server broadcasts object creation/deletion to room
+    //
+    // ====================================================================
+    // KEY CONCEPTS TO REMEMBER:
+    // ====================================================================
+    //
+    // SENDING MESSAGES (very important - common source of confusion!):
+    //
+    // socket.emit()        → Send to ONE client (the specific socket object)
+    //                        Think: "socket" = one phone line to one person
+    //
+    // io.to(room).emit()   → Send to ALL clients in a specific room
+    //                        Think: "io" = the phone system; "room" = group call
+    //
+    // io.emit()            → Send to ALL clients on the entire server
+    //                        Think: server-wide announcement (rarely used with rooms)
+    //
+    // ROOM MANAGEMENT:
+    //
+    // socket.join(room)    → Add this socket to a room group
+    // socket.leave(room)   → Remove this socket from a room group
+    //
+    // HELPER FUNCTIONS:
+    //
+    // getCurrentUser()     → Find which user/room this socket belongs to
+    // getRoomUsers()       → Get all users in a specific room
+    //
+    // ====================================================================
 });
 
-console.log('Matter.js physics engine initialized');
-console.log(`World: ${WORLD_WIDTH}x${WORLD_HEIGHT}`);
+console.log('Server started successfully!');
+console.log(`Visit http://localhost:${PORT} to connect`);

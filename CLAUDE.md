@@ -4,275 +4,306 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Server-authoritative multiplayer physics demo combining Matter.js (physics engine on Node.js server) with p5.js (rendering on browser client). Physics simulation runs on the server at 60 FPS, state is broadcast to all connected clients at 20 Hz, and clients render at 60 FPS using p5.js.
+Minimal multiplayer starter project for students building server-authoritative games. Demonstrates room-based multiplayer with Socket.IO, combining a Node.js server with a p5.js client.
 
-**Room System**: Players join named rooms (max 3 players per room). Each room has its own independent physics world. Players in different rooms never see each other's objects.
+**What it does:**
+- Players join named rooms (max 3 players per room)
+- Each room is isolated - players in different rooms don't see each other
+- Includes a simple messaging system to demonstrate client↔server communication
+- Provides scaffolded comments showing where to add game features
+
+**What it does NOT do:**
+- No game logic (students add this)
+- No physics engine (students can add Matter.js, p5.play, or custom physics)
+- No scoring, game objects, or gameplay mechanics (students implement these)
+
+This starter is designed to help students transition from using an "echo server" (which automatically forwards all messages) to writing their own server logic that controls what data gets sent to whom.
 
 ## Commands
 
-### Development
+### Setup
 ```bash
-npm install       # Install dependencies (express, matter-js, socket.io)
+npm install       # Install dependencies (express, socket.io)
 npm start         # Start server on port 3000
 ```
 
-### Testing Multiplayer
-1. Open http://localhost:3000 in multiple browser tabs
-2. Enter a username and room name (e.g., "Alice" and "room1")
-3. In another tab, join the same room with a different username
-4. Open a 3rd tab and join the same room - all 3 players share physics
-5. Try opening a 4th tab - it will be rejected with "Room full" message
-6. Open a tab with a different room name to create a separate physics world
+### Testing Multiplayer Rooms
+1. Open http://localhost:3000 in a browser tab
+2. Enter username "Alice" and room "room1", click Join
+3. Open another tab, enter username "Bob" and room "room1"
+4. Both players now share the same room - messages sent by one appear for both
+5. Open a third tab, enter username "Charlie" and room "room1" - all 3 share messages
+6. Open a fourth tab and try to join "room1" - you'll get "Room full" error
+7. Open a tab with username "Dave" and room "room2" - this creates a new isolated room
 
 ## Architecture
 
-### Room System (server.js)
+### Server-Side (server.js)
 
-Each room is completely isolated with its own physics world:
+**Room Management:**
+- `users` array tracks all connected users: `{ id, username, room }`
+- `MAX_PLAYERS_PER_ROOM` constant (currently 3) limits room size
+- Helper functions manage user lifecycle:
+  - `userJoin(id, username, room)` - Add user to tracking
+  - `getCurrentUser(id)` - Look up user by socket ID
+  - `userLeave(id)` - Remove user when disconnecting
+  - `getRoomUsers(room)` - Get all users in a specific room
 
+**Socket.IO Events (Server receives from clients):**
+- `joinRoom` - Client requests to join with `{ username, room }`
+  - Server checks if room is full
+  - Rejects with `roomFull` event if at capacity
+  - Accepts by calling `socket.join(room)` and sending `joinSuccess`
+  - Broadcasts updated `roomInfo` to everyone in room
+- `sendMessage` - Client sends `{ message }`
+  - Server looks up which room the user is in
+  - Broadcasts `newMessage` to all players in that room only
+- `disconnect` - Automatic when client closes
+  - Server removes user from tracking
+  - Broadcasts updated `roomInfo` to remaining players in room
+
+**Key Server Pattern:**
 ```javascript
-const rooms = {}; // { roomName: { engine, world, bodies, nextBodyId } }
-```
+socket.on('eventFromClient', (data) => {
+    const user = getCurrentUser(socket.id);  // Find which room they're in
+    if (!user) return;
 
-**Player Management** (all in server.js):
-- `users` array tracks all connected players
-- `userJoin(id, username, room)` - Adds player to room
-- `getCurrentUser(id)` - Gets player by socket ID
-- `userLeave(id)` - Removes player and returns their info
-- `getRoomUsers(room)` - Returns all players in a room
+    // Process data, validate, update server state...
 
-**Physics World Per Room**:
-- `createRoomPhysics(roomName)` - Creates new engine, world, and walls for a room
-- `getRoomPhysics(roomName)` - Gets existing room or creates new one
-- `deleteRoomPhysics(roomName)` - Cleans up empty room
-
-When a room becomes empty (all players disconnect), its physics world is deleted to free memory.
-
-### Two-Loop Game Server Pattern (server.js)
-
-The server runs **two independent setInterval loops** that update **all active rooms**:
-
-1. **Physics Loop (60 FPS)** - Updates Matter.js physics for every room
-   ```javascript
-   setInterval(() => {
-       Object.keys(rooms).forEach(roomName => {
-           const room = rooms[roomName];
-           Engine.update(room.engine, 1000 / TICK_RATE);
-       });
-   }, 1000 / 60);
-   ```
-
-2. **Network Loop (20 Hz)** - Broadcasts each room's state to its players only
-   ```javascript
-   setInterval(() => {
-       Object.keys(rooms).forEach(roomName => {
-           const room = rooms[roomName];
-           if (room.bodies.length > 0) {
-               io.to(roomName).emit('physicsUpdate', getPhysicsState(roomName));
-           }
-       });
-   }, 1000 / 20);
-   ```
-
-This separation allows smooth physics simulation (60 FPS) while keeping network bandwidth reasonable (20 updates/sec). Note that `io.to(roomName)` ensures updates only go to players in that specific room.
-
-### State Serialization
-
-Each room maintains its own `bodies` array where each element contains:
-- `matter` - The Matter.js Body object (server-side physics)
-- `data` - Metadata (id, type, color, dimensions)
-
-`getPhysicsState(roomName)` serializes the room's bodies to plain objects sent to clients:
-```javascript
-{
-    id: b.data.id,
-    type: b.data.type,
-    x: matter.position.x,      // Matter.js provides position
-    y: matter.position.y,
-    angle: matter.angle,        // Matter.js provides rotation
-    vx: matter.velocity.x,
-    vy: matter.velocity.y,
-    // ... plus color, radius/width/height
-}
-```
-
-### Client-Side Rendering (index.html)
-
-Client stores bodies as plain objects (not Matter.js objects) and renders them with p5.js:
-
-```javascript
-socket.on('physicsUpdate', (bodiesData) => {
-    bodies = {};  // Replace entire state
-    bodiesData.forEach(bodyData => {
-        bodies[bodyData.id] = bodyData;
-    });
-});
-
-function draw() {
-    Object.values(bodies).forEach(body => {
-        push();
-        translate(body.x, body.y);
-        rotate(body.angle);  // Use angle from server
-        // ... render circle or box
-        pop();
-    });
-}
-```
-
-**Important**: Client has no physics engine. All position, velocity, and rotation data comes from server.
-
-### Socket.IO Event Flow
-
-**Client → Server:**
-- `joinRoom` - Request to join a room with `{ username, room }`
-- `spawnCircle` / `spawnBox` - Click to spawn objects (sent to user's room)
-- `explode` - Apply radial force to nearby bodies in user's room
-- `clearBodies` - Remove all dynamic bodies in user's room
-
-**Server → Client:**
-- `roomFull` - Sent if room has 3 players already (client stays on join screen)
-- `worldState` - Sent after successful join (dimensions + initial bodies for that room)
-- `roomInfo` - Sent when players join/leave (player count and list of names)
-- `physicsUpdate` - Broadcast every 50ms (20 Hz) to room with body states
-- `bodySpawned` - Immediate notification when body created in room
-- `bodiesCleared` - Notification that all bodies removed from room
-
-**Important**: All game events use `io.to(roomName)` to ensure they only go to players in that specific room. The server looks up the user's room via `getCurrentUser(socket.id)`.
-
-## Matter.js Integration Notes
-
-### Creating Bodies
-
-Always use `Bodies.circle()` and `Bodies.rectangle()` factory functions, not constructors:
-
-```javascript
-const circle = Bodies.circle(x, y, radius, {
-    restitution: 0.8,   // Bounciness (0-1)
-    friction: 0.01,     // Surface friction
-    density: 0.001      // Mass per unit area
+    // Send to everyone in this room:
+    io.to(user.room).emit('eventToClients', { ... });
 });
 ```
 
-### Adding to World
+### Client-Side (index.html)
 
-All bodies (static walls and dynamic objects) must be added to the world:
+**Join Screen:**
+- Two input fields: username and room name
+- On submit, sends `joinRoom` event to server
+- Listens for `roomFull` (error) or `joinSuccess` (accepted)
+- Switches to game screen when accepted
+
+**Game Screen:**
+- **Room Info Panel**: Shows room name, player count, and player names
+- **p5.js Canvas**: 600x500 canvas for rendering (currently just shows player list)
+- **Chat Panel**: Messaging interface to demonstrate Socket.IO communication
+
+**Socket Event Pattern:**
 ```javascript
-World.add(world, bodies);
+// Send to server:
+socket.emit('eventName', { data: value });
+
+// Receive from server:
+socket.on('eventName', (data) => {
+    // Update UI or game state
+});
 ```
 
-### Applying Forces
+**p5.js Integration:**
+- `setup()` - Creates canvas, initializes game state
+- `draw()` - Runs at 60 FPS, renders game visuals
+- `mousePressed()` - Handles click input
+- Students add game logic in these functions
 
-Use `Body.applyForce()` for explosions or impulses:
-```javascript
-Body.applyForce(body, body.position, { x: forceX, y: forceY });
+## File Structure
+
+```
+server.js        (~200 lines) - Node.js server with room management and Socket.IO
+index.html       (~510 lines) - Join screen + p5.js client + messaging UI
+package.json     - Dependencies (express, socket.io only)
+CLAUDE.md        - This documentation file
 ```
 
-The explosion system calculates force magnitude inversely proportional to distance:
+All code is in these files - no build system or bundler required for simplicity.
+
+## Key Concepts for Students
+
+### Echo Server vs Custom Server
+
+**Echo Server (previous project):**
+- Automatically forwarded all `socket.emit()` to all connected clients
+- Students couldn't see or control server logic
+- No concept of rooms or selective broadcasting
+
+**This Custom Server:**
+- Students write server-side event handlers in `server.js`
+- Students decide what data to send and to whom
+- Students can validate, modify, or reject client requests
+- Students control room isolation with `io.to(room).emit()`
+
+### Room Isolation
+
+Rooms are like separate "universes" - players in `room1` never receive events sent to `room2`.
+
+Server uses `io.to(roomName).emit()` to broadcast only to players in that room:
 ```javascript
-const forceMagnitude = data.power / (distance + 1);
+io.to(user.room).emit('gameUpdate', { /* data */ });  // Only this room receives it
 ```
 
-### Static vs Dynamic Bodies
+### Broadcasting Patterns
 
-- **Static** (`isStatic: true`): Walls, platforms - never move, infinite mass
-- **Dynamic** (default): Circles, boxes - affected by forces and collisions
-
-Static walls are created at initialization and stored in `walls` array but not included in `getPhysicsState()` since they never change.
-
-## Key Implementation Details
-
-### Body ID Management
-
-Each room has its own ID counter:
-- `room.nextBodyId` - Sequential ID for game logic within that room (0, 1, 2...)
-- `body.id` - Matter.js internal ID (not used for client communication)
-
-Always use `data.id` (not `matter.id`) when referencing bodies in Socket.IO events. Body IDs are room-specific, so two different rooms can both have a body with ID 0.
-
-### Coordinate System
-
-- Origin (0, 0) is top-left
-- Positive Y is down (standard canvas coordinates)
-- World dimensions: 800x600 pixels
-- Gravity: `engine.world.gravity.y = 1` (Matter.js units)
-
-### Random Properties
-
-Objects spawn with random size and color:
+**Send to one client only (the one that triggered the event):**
 ```javascript
-const radius = 15 + Math.random() * 25;  // 15-40
-const color = `rgb(${Math.floor(Math.random() * 256)}, ...)`;
+socket.emit('privateMessage', { data });
 ```
 
-Color is stored in `render.fillStyle` property and sent to clients.
+**Send to all clients in a room:**
+```javascript
+io.to(roomName).emit('roomUpdate', { data });
+```
 
-## Common Modifications
+**Send to all clients on entire server (rare with rooms):**
+```javascript
+io.emit('serverAnnouncement', { data });
+```
 
-### Adding New Body Types
+## Adding Game Features
 
-1. Create factory function (like `createCircle`) that takes `roomName` as first parameter
-2. Use `getRoomPhysics(roomName)` to get the room's physics world
-3. Use Matter.js `Bodies.*` to create physics body
-4. Store in `room.bodies` array with metadata
-5. Add Socket.IO handler that gets user's room via `getCurrentUser(socket.id)`
-6. Update client rendering in `draw()` function
+The code includes extensive `🎓 STUDENT INSTRUCTIONS` comments showing where to add features. Here's the general pattern:
 
-### Changing Physics Parameters
+### 1. Define Game State (client-side)
 
-- **Bounciness**: Adjust `restitution` (0-1)
-- **Friction**: Adjust `friction` (0-1)
-- **Mass**: Adjust `density` (affects collision response)
-- **Gravity**: Modify `engine.world.gravity.y`
+In `index.html`, add variables after the existing state:
+```javascript
+let playerPositions = {};  // { username: { x, y } }
+let score = 0;
+```
 
-### Adjusting Update Rates
+### 2. Send Events to Server (client-side)
 
-- Physics: Change `TICK_RATE` (currently 60)
-- Network: Change `UPDATE_RATE` (currently 20)
-- Client render: Modify `frameRate(60)` in setup()
+```javascript
+// In draw() or mousePressed():
+socket.emit('playerMove', { x: mouseX, y: mouseY });
+```
 
-Higher network rates increase bandwidth; lower rates increase latency.
+### 3. Handle Events on Server (server-side)
 
-### Changing Room Size
+In `server.js`, add a new handler inside `io.on('connection', ...)`:
+```javascript
+socket.on('playerMove', (data) => {
+    const user = getCurrentUser(socket.id);
+    if (!user) return;
 
-Change `MAX_PLAYERS_PER_ROOM` constant in server.js (currently 3). The server checks `getRoomUsers(room).length >= MAX_PLAYERS_PER_ROOM` before allowing joins.
+    // Validate data.x and data.y...
+
+    // Broadcast to everyone in room
+    io.to(user.room).emit('playerMoved', {
+        username: user.username,
+        x: data.x,
+        y: data.y
+    });
+});
+```
+
+### 4. Receive Events on Client (client-side)
+
+In `index.html`, add a listener:
+```javascript
+socket.on('playerMoved', (data) => {
+    playerPositions[data.username] = { x: data.x, y: data.y };
+});
+```
+
+### 5. Render in p5.js (client-side)
+
+In the `draw()` function:
+```javascript
+for (let username in playerPositions) {
+    let pos = playerPositions[username];
+    fill(100, 200, 100);
+    ellipse(pos.x, pos.y, 30, 30);
+    text(username, pos.x, pos.y - 20);
+}
+```
+
+## Common Student Implementations
+
+Students typically add:
+
+**Player Movement:**
+- Track each player's position on server
+- Broadcast position updates to room
+- Render all players on each client's canvas
+
+**Game Objects:**
+- Server creates objects with unique IDs
+- Server broadcasts object creation/deletion
+- Clients render objects from server state
+
+**Turn-Based Logic:**
+- Server tracks whose turn it is
+- Server validates actions (only accept from current player)
+- Server broadcasts turn changes
+
+**Scoring System:**
+- Server maintains score for each player
+- Server validates score changes (prevent cheating)
+- Server broadcasts score updates
+
+**Collectibles/Power-ups:**
+- Server spawns items at random positions
+- Client sends "collect" event when touching item
+- Server validates (is player close enough?) and removes item
+- Server broadcasts item removal to all players
 
 ## Debugging Tips
 
 ### Server Console
-- Shows room join attempts and rejections
-- Shows which room each player is in (e.g., "Alice joined room room1. Players: 2/3")
-- Shows physics world creation/deletion for rooms
-- Logs spawn and explosion events with room names
-- Check if `rooms` object is growing (might indicate rooms not being cleaned up)
+```
+Client connected: abc123
+User Alice attempting to join room: room1
+Alice joined room room1. Players: 1/3
+[room1] Alice: Hello!
+Client disconnected: Alice from room room1
+```
 
-### Client Console (Browser DevTools)
-- `bodies` object shows current state
-- Check Socket.IO connection status
-- Monitor frameRate if rendering is slow
-- Check if `roomInfo` events are being received with player list
+### Client Console (Browser DevTools - F12)
+- Check `console.log()` output to see data flow
+- Inspect `players` array to see who's in room
+- Monitor socket connection status
+- Check for errors in event handlers
 
 ### Common Issues
 
-**"Room full" error**: Room has 3 players. Try different room name or wait for someone to leave
-**Objects not appearing**: Check that server is adding to correct room's world AND broadcasting to that room
-**Seeing other players' objects**: Bug - check that `io.to(roomName)` is being used, not `io.emit()`
-**Desynchronization**: Ensure client is replacing entire `bodies` object (not merging)
-**Performance issues**: Reduce UPDATE_RATE or limit max body count per room
-**Explosion too weak/strong**: Adjust `data.power` in explosion event (currently 5)
-**Memory leak**: Check that `deleteRoomPhysics()` is called when last player leaves room
+**"Room full" when joining:**
+- Room already has `MAX_PLAYERS_PER_ROOM` players
+- Try a different room name or increase the limit in `server.js`
 
-## File Structure
+**Messages not appearing:**
+- Check that client is sending to correct event name
+- Check that server is listening for that event name
+- Check that server is broadcasting back to the room
+- Check browser console for errors
 
-- `server.js` (~343 lines) - Express server + Room management + Matter.js physics + Socket.IO
-  - Room management helper functions (lines 17-45)
-  - Physics world creation per room (lines 47-107)
-  - Room-specific helper functions (lines 109-196)
-  - Game loops for all rooms (lines 198-219)
-  - Socket.IO handlers with room logic (lines 221-340)
-- `index.html` (~412 lines) - Join screen + p5.js client + Socket.IO client + HTML/CSS UI
-  - Join screen UI and logic
-  - Room info display
-  - p5.js rendering for physics bodies
-- `package.json` - Dependencies (express, matter-js, socket.io)
+**Seeing other rooms' data:**
+- Server must use `io.to(user.room).emit()` not `io.emit()`
+- Check that `getCurrentUser()` is being called to find user's room
 
-All logic is contained in these two files - no build system, bundler, or separate utility files required. This makes it easier for students to understand the complete flow.
+**Player names not updating:**
+- The `roomInfo` event should trigger on join and disconnect
+- Check that client has `socket.on('roomInfo', ...)` handler
+
+## Testing Checklist
+
+- [ ] Can join a room successfully
+- [ ] Room full error appears when 4th player tries to join
+- [ ] Player names appear in room info panel
+- [ ] Player names appear on canvas
+- [ ] Chat messages appear for all players in room
+- [ ] Players in different rooms don't see each other's messages
+- [ ] When player disconnects, their name disappears from room info
+- [ ] Multiple rooms can exist simultaneously without interference
+
+## Next Steps for Students
+
+Once comfortable with the starter:
+
+1. **Add visual player representation** - Show each player as a colored circle/sprite
+2. **Implement player movement** - Use arrow keys or mouse to control position
+3. **Add game mechanics** - Scoring, collectibles, obstacles, etc.
+4. **Implement game objects** - Server-controlled entities all players can see
+5. **Add game states** - Lobby, playing, game over screens
+6. **Implement win conditions** - Detect and broadcast when someone wins
+7. **Add visual polish** - Animations, particles, sound effects
+
+Remember: Server is the "source of truth" - validate and control game state on server, not client!
