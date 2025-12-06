@@ -121,15 +121,50 @@ All code is in these files - no build system or bundler required for simplicity.
 ### Echo Server vs Custom Server
 
 **Echo Server (previous project):**
-- Automatically forwarded all `socket.emit()` to all connected clients
+- Students did `socket.emit('event', data)` on the client
+- The echo server automatically forwarded it to **all connected clients**
+- From student perspective, `socket.emit()` seemed to broadcast to everyone
 - Students couldn't see or control server logic
 - No concept of rooms or selective broadcasting
 
 **This Custom Server:**
+- Students still do `socket.emit('event', data)` on the client (same syntax!)
+- But now it goes to **their own server** (server.js), not to other clients
 - Students write server-side event handlers in `server.js`
-- Students decide what data to send and to whom
+- Students decide what data to send and to whom:
+  - `socket.emit()` on server = send to ONE client
+  - `io.to(room).emit()` = send to ALL in a room
+  - `io.emit()` = send to ALL on server
 - Students can validate, modify, or reject client requests
 - Students control room isolation with `io.to(room).emit()`
+
+**Key Learning Transition:**
+- Client-side `socket.emit()` **always** goes to the server (never directly to other clients)
+- Server-side code determines who receives what and when
+- This is how real multiplayer games work - server is the authority!
+
+**Visual Comparison:**
+
+```
+ECHO SERVER (previous):
+┌─────────┐                  ┌─────────────┐                 ┌─────────┐
+│ Client1 │─socket.emit()──→ │ Echo Server │ ─automatically→ │ Client2 │
+└─────────┘                  │  (hidden)   │ ─forwards to──→ │ Client3 │
+                             └─────────────┘ ─everyone───→   │ Client4 │
+                                                              └─────────┘
+YOUR CUSTOM SERVER (this project):
+┌─────────┐                  ┌──────────────────┐            ┌─────────┐
+│ Client1 │─socket.emit()──→ │  YOUR server.js  │            │ Client2 │
+└─────────┘                  │                  │            │ Client3 │
+                             │ YOU decide:      │            │ Client4 │
+                             │ • Validate data  │            └─────────┘
+                             │ • Update state   │                 ↑
+                             │ • Who gets it?   │                 │
+                             └──────────────────┘                 │
+                                      │                           │
+                                      └─io.to(room).emit()────────┘
+                                        (YOU control this!)
+```
 
 ### Room Isolation
 
@@ -141,6 +176,8 @@ io.to(user.room).emit('gameUpdate', { /* data */ });  // Only this room receives
 ```
 
 ### Broadcasting Patterns
+
+**Important:** These patterns are used **on the server** (in server.js), not on the client!
 
 **Send to one client only (the one that triggered the event):**
 ```javascript
@@ -156,6 +193,35 @@ io.to(roomName).emit('roomUpdate', { data });
 ```javascript
 io.emit('serverAnnouncement', { data });
 ```
+
+**Example - Complete Message Flow:**
+
+```javascript
+// CLIENT (index.html):
+socket.emit('playerMove', { x: 100, y: 200 });
+// ↓ This goes to the server ONLY
+
+// SERVER (server.js):
+socket.on('playerMove', (data) => {
+    const user = getCurrentUser(socket.id);
+    // Server validates, processes, decides...
+
+    io.to(user.room).emit('playerMoved', {
+        username: user.username,
+        x: data.x,
+        y: data.y
+    });
+    // ↓ This goes to ALL clients in the room
+});
+
+// CLIENTS in room (index.html):
+socket.on('playerMoved', (data) => {
+    // Update game state
+    playerPositions[data.username] = { x: data.x, y: data.y };
+});
+```
+
+This is different from echo server where step 2 was automatic and hidden!
 
 ## Adding Game Features
 

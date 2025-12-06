@@ -51,8 +51,14 @@ function getRoomUsers(room) {
 
 // ====== SOCKET.IO EVENT HANDLERS ======
 // This is where YOU control what happens when clients send events
-// Unlike the echo server (which automatically forwarded everything),
-// YOU decide what to do with each event and what to send back
+//
+// KEY DIFFERENCE FROM ECHO SERVER:
+// - Echo server: When client did socket.emit(), the echo server automatically
+//   sent that message to ALL connected clients (you had no control)
+// - This server: When client does socket.emit(), YOU decide:
+//   - Send back to just that one client? Use socket.emit()
+//   - Send to everyone in their room? Use io.to(room).emit()
+//   - Send to everyone on server? Use io.emit()
 
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
@@ -104,12 +110,17 @@ io.on('connection', (socket) => {
     // ====== EVENT: SEND MESSAGE ======
     // Client sends: { message }
     // Server decides: Broadcast to everyone in the same room
+    //
+    // ECHO SERVER COMPARISON:
+    // - Old way (echo server): Client's socket.emit() automatically went to everyone
+    // - New way (your server): Client's socket.emit() comes here, YOU broadcast it
     socket.on('sendMessage', (data) => {
         // Look up which user this socket belongs to
         const user = getCurrentUser(socket.id);
         if (!user) return; // Safety check - user must be in a room
 
-        // Broadcast message to EVERYONE in this user's room (including sender)
+        // NOW you broadcast it to everyone in the room using io.to().emit()
+        // (The echo server did this automatically; now YOU control it)
         io.to(user.room).emit('newMessage', {
             username: user.username,
             message: data.message,
@@ -142,17 +153,20 @@ io.on('connection', (socket) => {
     // 🎓 STUDENT INSTRUCTIONS: HOW TO ADD NEW FEATURES
     // ====================================================================
     //
+    // REMEMBER: Unlike the echo server, socket.emit() from client goes to SERVER,
+    // not to other clients. YOU control who receives what by using io.to().emit()
+    //
     // To add a new feature, follow this pattern:
     //
-    // 1. CLIENT sends an event:
+    // 1. CLIENT sends an event (goes to SERVER, not other clients):
     //    socket.emit('yourEventName', { yourData: value });
     //
-    // 2. SERVER receives and handles it:
+    // 2. SERVER receives and handles it (YOU decide what to do):
     //    socket.on('yourEventName', (data) => {
     //        const user = getCurrentUser(socket.id);
     //        if (!user) return;
     //
-    //        // Process the data...
+    //        // Process the data (validate, update server state, etc.)...
     //
     //        // Send to just this client:
     //        socket.emit('responseEvent', { ... });
@@ -190,16 +204,28 @@ io.on('connection', (socket) => {
     // KEY CONCEPTS TO REMEMBER:
     // ====================================================================
     //
-    // SENDING MESSAGES (very important - common source of confusion!):
+    // IMPORTANT: CLIENT vs SERVER socket.emit()
     //
-    // socket.emit()        → Send to ONE client (the specific socket object)
-    //                        Think: "socket" = one phone line to one person
+    // When CLIENT does:     socket.emit('event', data)
+    //   → Always sends to the SERVER only (never directly to other clients)
     //
-    // io.to(room).emit()   → Send to ALL clients in a specific room
-    //                        Think: "io" = the phone system; "room" = group call
+    // When SERVER does:     socket.emit('event', data)
+    //   → Sends to ONE specific client (the socket that triggered this)
     //
-    // io.emit()            → Send to ALL clients on the entire server
-    //                        Think: server-wide announcement (rarely used with rooms)
+    // ECHO SERVER vs YOUR CUSTOM SERVER:
+    //
+    // Echo Server (previous project):
+    //   - Client: socket.emit('move', {x, y})
+    //   - Echo server automatically sent to ALL clients
+    //   - You had no control over who received what
+    //
+    // Your Custom Server (this project):
+    //   - Client: socket.emit('move', {x, y})
+    //   - Server receives it in socket.on('move', callback)
+    //   - YOU decide what to do:
+    //       socket.emit()          → Reply to just this one client
+    //       io.to(user.room).emit()→ Send to everyone in their room
+    //       io.emit()              → Send to everyone on the server
     //
     // ROOM MANAGEMENT:
     //

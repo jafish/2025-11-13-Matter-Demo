@@ -217,8 +217,18 @@
         // ====================================================================
         // SOCKET.IO CONNECTION
         // ====================================================================
-        // Unlike the "echo server", we now have a custom server that
-        // manages rooms and decides what to broadcast to whom
+        // IMPORTANT: How this is different from the echo server
+        //
+        // Echo Server (previous project):
+        //   - You did: socket.emit('event', data)
+        //   - Echo server automatically sent it to ALL connected clients
+        //   - You couldn't control who received what
+        //
+        // Custom Server (this project):
+        //   - You do: socket.emit('event', data)  ← Same syntax!
+        //   - But it goes to YOUR server (server.js), not to other clients
+        //   - Your server decides who receives it (one client, room, or all)
+        //   - This gives you control over game logic and room isolation
         var socket = io();
 
         // ====================================================================
@@ -346,26 +356,32 @@
         // 🎓 STUDENT INSTRUCTIONS: ADDING SOCKET EVENTS
         // ====================================================================
         //
-        // To communicate with the server, use this pattern:
+        // IMPORTANT: Client socket.emit() goes to SERVER, not other clients!
         //
         // SEND to server:
         //   socket.emit('eventName', { data: value });
+        //   ↑ This goes to YOUR server (server.js), not to other players
+        //   ↑ Your server decides what to do with it (see server.js)
         //
         // RECEIVE from server:
         //   socket.on('eventName', (data) => {
         //       // Handle the data
         //   });
+        //   ↑ Your server sent this (using socket.emit or io.to().emit)
         //
         // Example - sending player position:
         //   socket.emit('updatePosition', { x: mouseX, y: mouseY });
+        //   // Goes to server → server validates → server broadcasts to room
         //
         // Example - receiving game state:
         //   socket.on('gameState', (state) => {
         //       playerPositions = state.positions;
         //       gameObjects = state.objects;
         //   });
+        //   // Server sent this to everyone in your room
         //
-        // Remember: The server decides what gets sent to other players!
+        // KEY INSIGHT: Unlike echo server, YOU control the server logic!
+        // The server validates your data and decides who receives what.
         // ====================================================================
 
         // ====================================================================
