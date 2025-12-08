@@ -177,7 +177,7 @@
     <!-- ====== JOIN SCREEN ====== -->
     <div id="joinScreen">
         <h2>🎮 Multiplayer Room Starter</h2>
-        <p>Enter your details to join a room (max 3 players per room)</p>
+        <p>Enter your details to join a room (max 2 players per room)</p>
         <input type="text" id="usernameInput" placeholder="Your name" maxlength="20" required>
         <input type="text" id="roomInput" placeholder="Room name" maxlength="20" required>
         <button id="joinBtn">Join Room</button>
@@ -206,33 +206,33 @@
         </div>
     </div>
 
-    <!-- Load p5.js from CDN -->
+    <!-- Load p5.js from its URL -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
 
-    <!-- Load Socket.IO client from CDN -->
+    <!-- Load Socket.IO client from its URL -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
 
-    <!-- Main client code -->
+    <!-- Main p5.js code -->
     <script>
         // ====================================================================
-        // SOCKET.IO CONNECTION
+        // socket.io setup and echo server differences
         // ====================================================================
-        // IMPORTANT: How this is different from the echo server
         //
         // Echo Server (previous project):
-        //   - You did: socket.emit('event', data)
-        //   - Echo server automatically sent it to ALL connected clients
+        //   - socket.emit('event', data): Echo server automatically sent the
+        //      "event" message with "data" package to all connected clients
         //   - You couldn't control who received what
         //
         // Custom Server (this project):
-        //   - You do: socket.emit('event', data)  ← Same syntax!
-        //   - But it goes to YOUR server (server.js), not to other clients
-        //   - Your server decides who receives it (one client, room, or all)
+        //   - socket.emit('event', data) (exactly the same code!)
+        //   - Sends "event" message with "data" package to only your server
+        //      (server.js), not to other clients
+        //   - Your server decides who receives it (just this client, room, or all)
         //   - This gives you control over game logic and room isolation
         var socket = io();
 
         // ====================================================================
-        // CLIENT STATE
+        // Variables for tracking the client's state
         // ====================================================================
         let username = '';
         let roomName = '';
@@ -240,7 +240,7 @@
         let players = []; // List of player usernames in this room
 
         // ====================================================================
-        // 🎓 STUDENT INSTRUCTIONS: GAME STATE
+        // Instructions for you: game state
         // ====================================================================
         // Add your game state variables here! Examples:
         //
@@ -252,7 +252,7 @@
         // ====================================================================
 
         // ====================================================================
-        // JOIN ROOM LOGIC
+        // Game joining logic
         // ====================================================================
 
         // Handle join button click
@@ -316,7 +316,7 @@
         }
 
         // ====================================================================
-        // CHAT/MESSAGING SYSTEM
+        // Code to handle sending and receiving chat messages
         // ====================================================================
 
         // Send message button
@@ -353,17 +353,17 @@
         });
 
         // ====================================================================
-        // 🎓 STUDENT INSTRUCTIONS: ADDING SOCKET EVENTS
+        // Instructions for you: How to add socket events
         // ====================================================================
         //
-        // IMPORTANT: Client socket.emit() goes to SERVER, not other clients!
+        // Remember: Client socket.emit() goes to the server, not other clients!
         //
-        // SEND to server:
+        // Send to server:
         //   socket.emit('eventName', { data: value });
-        //   ↑ This goes to YOUR server (server.js), not to other players
+        //   ↑ This goes to your server (server.js), not to other players
         //   ↑ Your server decides what to do with it (see server.js)
         //
-        // RECEIVE from server:
+        // Receive from server:
         //   socket.on('eventName', (data) => {
         //       // Handle the data
         //   });
@@ -380,21 +380,21 @@
         //   });
         //   // Server sent this to everyone in your room
         //
-        // KEY INSIGHT: Unlike echo server, YOU control the server logic!
+        // Key insight: Unlike echo server, you control the server logic!
         // The server validates your data and decides who receives what.
         // ====================================================================
 
         // ====================================================================
-        // P5.JS SETUP AND DRAW
+        // p5.js setup and draw loop
         // ====================================================================
 
         function setup() {
-            // Create a canvas and attach it to the canvasContainer
+            // Create a canvas and attach it to the canvasContainer div
             let canvas = createCanvas(600, 500);
             canvas.parent('canvasContainer');
 
             // ================================================================
-            // 🎓 STUDENT INSTRUCTIONS: SETUP
+            // Instructions for you: setup
             // ================================================================
             // Initialize your game here!
             // - Load images/assets
@@ -428,9 +428,9 @@
             text('Add your game rendering code in the draw() function', width / 2, height / 2 + 25);
 
             // ================================================================
-            // 🎓 STUDENT INSTRUCTIONS: DRAW LOOP
+            // Instructions for you: main game loop in the draw() function
             // ================================================================
-            // Add your game rendering here!
+            // Add your game rendering here.
             //
             // This function runs 60 times per second (60 FPS)
             //
@@ -446,9 +446,8 @@
         }
 
         // ====================================================================
-        // 🎓 STUDENT INSTRUCTIONS: P5.JS INTERACTION
+        // Instructions for you: handling interaction
         // ====================================================================
-        // Add your interaction handlers here!
         //
         // Common p5.js functions:
         //
@@ -476,9 +475,8 @@
                 console.log(`Clicked at: (${mouseX}, ${mouseY})`);
 
                 // ============================================================
-                // 🎓 STUDENT INSTRUCTIONS: HANDLE CLICKS
+                // Instructions for you: add what you want to happen on click
                 // ============================================================
-                // Add your click handling here!
                 //
                 // Example - send click to server:
                 //   socket.emit('playerClick', { x: mouseX, y: mouseY });
@@ -490,36 +488,36 @@
         }
 
         // ====================================================================
-        // 🎓 STUDENT INSTRUCTIONS: HELPFUL TIPS
+        // General Tips
         // ====================================================================
         //
-        // CLIENT vs SERVER:
+        // Client vs Server:
         // - Client (this file): Handles rendering and user input
         // - Server (server.js): Handles game logic and broadcasts updates
         //
-        // ROOM ISOLATION:
+        // Room Isolation:
         // - Players in different rooms never see each other's data
         // - The server uses io.to(room).emit() to send only to your room
         //
-        // COMMON PATTERNS:
+        // Common Patterns:
         //
-        // 1. PLAYER MOVEMENT (client predicts, server validates)
+        // 1. Player Movement (client predicts, server validates)
         //    Client: Move player immediately, send position to server
         //    Server: Validate position, broadcast to all in room
         //
-        // 2. GAME OBJECTS (server is source of truth)
+        // 2. Game Objects (server is source of truth)
         //    Client: Request to create object
         //    Server: Create object with unique ID, broadcast to all
         //    Client: Render object when received
         //
-        // 3. TURN-BASED GAMES
+        // 3. Turn-Based Games
         //    Server: Track whose turn it is
         //    Client: Only allow actions when it's your turn
         //    Server: Validate actions and update game state
         //
-        // DEBUGGING:
-        // - Open browser console (F12) to see console.log() messages
-        // - Check server.js terminal to see server-side console.log()
+        // Debugging:
+        // - Open browser console (right-click->Inspect->Console tab) to see console.log() messages
+        // - Check server.js terminal in Codespace to see server-side console.log()
         // - Use console.log() frequently to understand data flow
         //
         // ====================================================================

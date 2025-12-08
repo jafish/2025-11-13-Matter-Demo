@@ -1,11 +1,15 @@
 'use strict';
 
-// ====== IMPORTS ======
+// ====================================================================
+// Imports
+// ====================================================================
 const express = require('express');
 const socketIO = require('socket.io');
 const path = require('path');
 
-// ====== SERVER SETUP ======
+// ====================================================================
+// Server setup
+// ====================================================================
 const PORT = process.env.PORT || 3000;
 const INDEX = path.join(__dirname, 'index.html');
 
@@ -17,8 +21,10 @@ const server = express()
 // Attach Socket.IO to the server
 const io = socketIO(server);
 
-// ====== ROOM MANAGEMENT ======
-// Unlike the "echo server" you used before, we now manage ROOMS
+// ====================================================================
+// Room management
+// ====================================================================
+// Unlike the "echo server" you used before, we now manage rooms
 // Players in different rooms cannot see each other's messages/data
 
 const MAX_PLAYERS_PER_ROOM = 2; // Change this to allow more/fewer players per room
@@ -49,13 +55,15 @@ function getRoomUsers(room) {
     return users.filter(user => user.room === room);
 }
 
-// ====== SOCKET.IO EVENT HANDLERS ======
-// This is where YOU control what happens when clients send events
+// ====================================================================
+// socket.io event handlers
+// ====================================================================
+// This is where you control what happens when clients send events
 //
-// KEY DIFFERENCE FROM ECHO SERVER:
+// Key difference from echo server:
 // - Echo server: When client did socket.emit(), the echo server automatically
-//   sent that message to ALL connected clients (you had no control)
-// - This server: When client does socket.emit(), YOU decide:
+//   sent that message to all connected clients (you had no control)
+// - This server: When client does socket.emit(), you decide:
 //   - Send back to just that one client? Use socket.emit()
 //   - Send to everyone in their room? Use io.to(room).emit()
 //   - Send to everyone on server? Use io.emit()
@@ -63,15 +71,17 @@ function getRoomUsers(room) {
 io.on('connection', (socket) => {
     console.log(`Client connected: ${socket.id}`);
 
-    // ====== EVENT: JOIN ROOM ======
+    // ====================================================================
+    // Event: join room
+    // ====================================================================
     // Client sends: { username, room }
     // Server decides: Allow join or reject if room is full
     socket.on('joinRoom', ({ username, room }) => {
         console.log(`User ${username} attempting to join room: ${room}`);
 
-        // CHECK: Is the room full?
+        // Check: Is the room full?
         if (getRoomUsers(room).length >= MAX_PLAYERS_PER_ROOM) {
-            // Send rejection message to THIS client only
+            // Send rejection message to this client only
             socket.emit('roomFull', {
                 message: `Room "${room}" is full! Maximum ${MAX_PLAYERS_PER_ROOM} players allowed.`
             });
@@ -85,17 +95,17 @@ io.on('connection', (socket) => {
         // Join the Socket.IO room (this groups sockets together)
         socket.join(user.room);
 
-        // Send success message to THIS client only
-        // IMPORTANT: socket.emit() sends to ONE client (this specific socket)
-        // Compare with io.to().emit() below which sends to ALL clients in room
+        // Send success message to this client only
+        // Important: socket.emit() sends to one client (this specific socket)
+        // Compare with io.to().emit() below which sends to all clients in room
         socket.emit('joinSuccess', {
             room: user.room,
             username: user.username
         });
 
-        // Broadcast updated room info to EVERYONE in this room
-        // IMPORTANT: io.to(room).emit() sends to ALL clients in that room
-        // Compare with socket.emit() above which sends to just ONE client
+        // Broadcast updated room info to everyone in this room
+        // Important: io.to(room).emit() sends to all clients in that room
+        // Compare with socket.emit() above which sends to just one client
         const roomUsers = getRoomUsers(user.room);
         io.to(user.room).emit('roomInfo', {
             room: user.room,
@@ -107,20 +117,22 @@ io.on('connection', (socket) => {
         console.log(`${username} joined room ${room}. Players: ${roomUsers.length}/${MAX_PLAYERS_PER_ROOM}`);
     });
 
-    // ====== EVENT: SEND MESSAGE ======
+    // ====================================================================
+    // Event: send message
+    // ====================================================================
     // Client sends: { message }
     // Server decides: Broadcast to everyone in the same room
     //
-    // ECHO SERVER COMPARISON:
+    // Echo server comparison:
     // - Old way (echo server): Client's socket.emit() automatically went to everyone
-    // - New way (your server): Client's socket.emit() comes here, YOU broadcast it
+    // - New way (your server): Client's socket.emit() comes here, you broadcast it
     socket.on('sendMessage', (data) => {
         // Look up which user this socket belongs to
         const user = getCurrentUser(socket.id);
         if (!user) return; // Safety check - user must be in a room
 
-        // NOW you broadcast it to everyone in the room using io.to().emit()
-        // (The echo server did this automatically; now YOU control it)
+        // Now you broadcast it to everyone in the room using io.to().emit()
+        // (The echo server did this automatically; now you control it)
         io.to(user.room).emit('newMessage', {
             username: user.username,
             message: data.message,
@@ -130,7 +142,9 @@ io.on('connection', (socket) => {
         console.log(`[${user.room}] ${user.username}: ${data.message}`);
     });
 
-    // ====== EVENT: DISCONNECT ======
+    // ====================================================================
+    // Event: disconnect
+    // ====================================================================
     // Automatically triggered when a client disconnects
     socket.on('disconnect', () => {
         const user = userLeave(socket.id);
@@ -150,18 +164,18 @@ io.on('connection', (socket) => {
     });
 
     // ====================================================================
-    // 🎓 STUDENT INSTRUCTIONS: HOW TO ADD NEW FEATURES
+    // Instructions for you: How to add new features
     // ====================================================================
     //
-    // REMEMBER: Unlike the echo server, socket.emit() from client goes to SERVER,
-    // not to other clients. YOU control who receives what by using io.to().emit()
+    // Remember: Unlike the echo server, socket.emit() from client goes to server,
+    // not to other clients. You control who receives what by using io.to().emit()
     //
     // To add a new feature, follow this pattern:
     //
-    // 1. CLIENT sends an event (goes to SERVER, not other clients):
+    // 1. Client sends an event (goes to server, not other clients):
     //    socket.emit('yourEventName', { yourData: value });
     //
-    // 2. SERVER receives and handles it (YOU decide what to do):
+    // 2. Server receives and handles it (you decide what to do):
     //    socket.on('yourEventName', (data) => {
     //        const user = getCurrentUser(socket.id);
     //        if (!user) return;
@@ -175,13 +189,13 @@ io.on('connection', (socket) => {
     //        io.to(user.room).emit('responseEvent', { ... });
     //    });
     //
-    // 3. CLIENT receives the response:
+    // 3. Client receives the response:
     //    socket.on('responseEvent', (data) => {
     //        // Update your UI or game state
     //    });
     //
     // ====================================================================
-    // EXAMPLES OF FEATURES YOU COULD ADD:
+    // Examples of features you could add:
     // ====================================================================
     //
     // • Game state synchronization (positions, scores, etc.)
@@ -201,38 +215,38 @@ io.on('connection', (socket) => {
     //   - Server broadcasts object creation/deletion to room
     //
     // ====================================================================
-    // KEY CONCEPTS TO REMEMBER:
+    // Key concepts to remember:
     // ====================================================================
     //
-    // IMPORTANT: CLIENT vs SERVER socket.emit()
+    // Important: Client vs Server socket.emit()
     //
-    // When CLIENT does:     socket.emit('event', data)
-    //   → Always sends to the SERVER only (never directly to other clients)
+    // When client does:     socket.emit('event', data)
+    //   → Always sends to the server only (never directly to other clients)
     //
-    // When SERVER does:     socket.emit('event', data)
-    //   → Sends to ONE specific client (the socket that triggered this)
+    // When server does:     socket.emit('event', data)
+    //   → Sends to one specific client (the socket that triggered this)
     //
-    // ECHO SERVER vs YOUR CUSTOM SERVER:
+    // Echo server vs your custom server:
     //
     // Echo Server (previous project):
     //   - Client: socket.emit('move', {x, y})
-    //   - Echo server automatically sent to ALL clients
+    //   - Echo server automatically sent to all clients
     //   - You had no control over who received what
     //
-    // Your Custom Server (this project):
+    // Your custom server (this project):
     //   - Client: socket.emit('move', {x, y})
     //   - Server receives it in socket.on('move', callback)
-    //   - YOU decide what to do:
+    //   - You decide what to do:
     //       socket.emit()          → Reply to just this one client
     //       io.to(user.room).emit()→ Send to everyone in their room
     //       io.emit()              → Send to everyone on the server
     //
-    // ROOM MANAGEMENT:
+    // Room management:
     //
     // socket.join(room)    → Add this socket to a room group
     // socket.leave(room)   → Remove this socket from a room group
     //
-    // HELPER FUNCTIONS:
+    // Helper functions:
     //
     // getCurrentUser()     → Find which user/room this socket belongs to
     // getRoomUsers()       → Get all users in a specific room
