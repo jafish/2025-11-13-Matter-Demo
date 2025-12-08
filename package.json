@@ -1,7 +1,7 @@
 {
-  "name": "multiplayer-room-starter",
+  "name": "multiplayer-starter",
   "version": "1.0.0",
-  "description": "Minimal starter project for server-authoritative multiplayer games with room management",
+  "description": "Minimal starter project for server-authoritative multiplayer games",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,7 +10,6 @@
     "p5.js",
     "socket.io",
     "multiplayer",
-    "rooms",
     "starter",
     "template"
   ],

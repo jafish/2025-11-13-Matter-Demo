@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Multiplayer Room Starter</title>
+    <title>Multiplayer Starter</title>
     <meta charset="utf-8">
     <style>
         body {
@@ -69,7 +69,7 @@
             width: 100%;
             max-width: 1000px;
         }
-        #roomInfo {
+        #playerInfo {
             background: rgba(255, 255, 255, 0.95);
             padding: 15px;
             border-radius: 10px;
@@ -77,7 +77,7 @@
             text-align: center;
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
-        #roomInfo h2 {
+        #playerInfo h2 {
             margin: 0 0 10px 0;
             color: #333;
         }
@@ -176,19 +176,18 @@
 <body>
     <!-- ====== JOIN SCREEN ====== -->
     <div id="joinScreen">
-        <h2>🎮 Multiplayer Room Starter</h2>
-        <p>Enter your details to join a room (max 3 players per room)</p>
+        <h2>🎮 Multiplayer Starter</h2>
+        <p>Enter your name to join</p>
         <input type="text" id="usernameInput" placeholder="Your name" maxlength="20" required>
-        <input type="text" id="roomInput" placeholder="Room name" maxlength="20" required>
-        <button id="joinBtn">Join Room</button>
+        <button id="joinBtn">Join</button>
         <div id="errorMessage"></div>
     </div>
 
     <!-- ====== GAME SCREEN ====== -->
     <div id="gameContainer">
-        <div id="roomInfo">
-            <h2>🎮 Multiplayer Room Starter</h2>
-            <div id="roomDetails"></div>
+        <div id="playerInfo">
+            <h2>🎮 Multiplayer Starter</h2>
+            <div id="playerDetails"></div>
         </div>
 
         <div id="mainContent">
@@ -197,11 +196,11 @@
             </div>
 
             <div id="chatContainer">
-                <h3>💬 Room Chat</h3>
+                <h3>💬 Chat</h3>
                 <div id="messageList"></div>
                 <input type="text" id="messageInput" placeholder="Type a message..." maxlength="200">
                 <button id="sendBtn">Send Message</button>
-                <div class="info-text">Messages are only visible to players in this room</div>
+                <div class="info-text">All connected players can see messages</div>
             </div>
         </div>
     </div>
@@ -227,17 +226,16 @@
         // Custom Server (this project):
         //   - You do: socket.emit('event', data)  ← Same syntax!
         //   - But it goes to YOUR server (server.js), not to other clients
-        //   - Your server decides who receives it (one client, room, or all)
-        //   - This gives you control over game logic and room isolation
+        //   - Your server decides who receives it (just this client or all)
+        //   - This gives you control over game logic and validation
         var socket = io();
 
         // ====================================================================
         // CLIENT STATE
         // ====================================================================
         let username = '';
-        let roomName = '';
-        let inRoom = false;
-        let players = []; // List of player usernames in this room
+        let joined = false;
+        let players = []; // List of all connected player usernames
 
         // ====================================================================
         // 🎓 STUDENT INSTRUCTIONS: GAME STATE
@@ -252,56 +250,46 @@
         // ====================================================================
 
         // ====================================================================
-        // JOIN ROOM LOGIC
+        // JOIN LOGIC
         // ====================================================================
 
         // Handle join button click
         document.getElementById('joinBtn').addEventListener('click', () => {
             username = document.getElementById('usernameInput').value.trim();
-            roomName = document.getElementById('roomInput').value.trim();
 
-            if (!username || !roomName) {
-                showError('Please enter both name and room name!');
+            if (!username) {
+                showError('Please enter your name!');
                 return;
             }
 
             // Send join request to server
-            socket.emit('joinRoom', { username, room: roomName });
+            socket.emit('join', { username });
         });
 
-        // Handle Enter key in input fields
+        // Handle Enter key in input field
         document.getElementById('usernameInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') document.getElementById('joinBtn').click();
-        });
-        document.getElementById('roomInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') document.getElementById('joinBtn').click();
-        });
-
-        // Server rejected join (room is full)
-        socket.on('roomFull', (data) => {
-            showError(data.message);
         });
 
         // Server accepted join
         socket.on('joinSuccess', (data) => {
-            if (!inRoom) {
-                inRoom = true;
+            if (!joined) {
+                joined = true;
                 document.getElementById('joinScreen').style.display = 'none';
                 document.getElementById('gameContainer').style.display = 'block';
-                console.log(`Successfully joined room: ${data.room}`);
+                console.log(`Successfully joined as: ${data.username}`);
             }
         });
 
-        // Update room info (player list)
-        socket.on('roomInfo', (data) => {
+        // Update player list
+        socket.on('userList', (data) => {
             players = data.players;
 
-            // Update the room details display
-            const roomDetailsDiv = document.getElementById('roomDetails');
+            // Update the player details display
+            const playerDetailsDiv = document.getElementById('playerDetails');
             const playersList = data.players.map(p => `<span class="player-name">${p}</span>`).join(' ');
-            roomDetailsDiv.innerHTML = `
-                <strong>Room:</strong> ${data.room} |
-                <strong>Players:</strong> ${data.playerCount}/${data.maxPlayers}<br>
+            playerDetailsDiv.innerHTML = `
+                <strong>Connected Players:</strong> ${data.playerCount}<br>
                 ${playersList}
             `;
         });
@@ -367,18 +355,18 @@
         //   socket.on('eventName', (data) => {
         //       // Handle the data
         //   });
-        //   ↑ Your server sent this (using socket.emit or io.to().emit)
+        //   ↑ Your server sent this (using socket.emit or io.emit)
         //
         // Example - sending player position:
         //   socket.emit('updatePosition', { x: mouseX, y: mouseY });
-        //   // Goes to server → server validates → server broadcasts to room
+        //   // Goes to server → server validates → server broadcasts to all
         //
         // Example - receiving game state:
         //   socket.on('gameState', (state) => {
         //       playerPositions = state.positions;
         //       gameObjects = state.objects;
         //   });
-        //   // Server sent this to everyone in your room
+        //   // Server sent this to everyone
         //
         // KEY INSIGHT: Unlike echo server, YOU control the server logic!
         // The server validates your data and decides who receives what.
@@ -411,7 +399,7 @@
             fill(255);
             textAlign(LEFT, TOP);
             textSize(16);
-            text('Players in room:', 20, 20);
+            text('Connected players:', 20, 20);
 
             let yPos = 45;
             players.forEach((playerName, index) => {
@@ -497,15 +485,11 @@
         // - Client (this file): Handles rendering and user input
         // - Server (server.js): Handles game logic and broadcasts updates
         //
-        // ROOM ISOLATION:
-        // - Players in different rooms never see each other's data
-        // - The server uses io.to(room).emit() to send only to your room
-        //
         // COMMON PATTERNS:
         //
         // 1. PLAYER MOVEMENT (client predicts, server validates)
         //    Client: Move player immediately, send position to server
-        //    Server: Validate position, broadcast to all in room
+        //    Server: Validate position, broadcast to all players
         //
         // 2. GAME OBJECTS (server is source of truth)
         //    Client: Request to create object

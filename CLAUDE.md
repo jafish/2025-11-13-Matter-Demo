@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Minimal multiplayer starter project for students building server-authoritative games. Demonstrates room-based multiplayer with Socket.IO, combining a Node.js server with a p5.js client.
+Minimal multiplayer starter project for students building server-authoritative games. Demonstrates basic Socket.IO communication between a Node.js server and p5.js clients. All players share one connected space.
 
 **What it does:**
-- Players join named rooms (max 3 players per room)
-- Each room is isolated - players in different rooms don't see each other
+- Players connect by entering a username
+- All players see each other (no limit on player count)
 - Includes a simple messaging system to demonstrate client↔server communication
 - Provides scaffolded comments showing where to add game features
 
@@ -27,64 +27,60 @@ npm install       # Install dependencies (express, socket.io)
 npm start         # Start server on port 3000
 ```
 
-### Testing Multiplayer Rooms
+### Testing Multiplayer
 1. Open http://localhost:3000 in a browser tab
-2. Enter username "Alice" and room "room1", click Join
-3. Open another tab, enter username "Bob" and room "room1"
-4. Both players now share the same room - messages sent by one appear for both
-5. Open a third tab, enter username "Charlie" and room "room1" - all 3 share messages
-6. Open a fourth tab and try to join "room1" - you'll get "Room full" error
-7. Open a tab with username "Dave" and room "room2" - this creates a new isolated room
+2. Enter username "Alice", click Join
+3. Open another tab, enter username "Bob"
+4. Both players now share the same space - messages sent by one appear for both
+5. Open more tabs with different usernames - all players can see each other
 
 ## Architecture
 
 ### Server-Side (server.js)
 
-**Room Management:**
-- `users` array tracks all connected users: `{ id, username, room }`
-- `MAX_PLAYERS_PER_ROOM` constant (currently 3) limits room size
+**User Management:**
+- `users` array tracks all connected users: `{ id, username }`
 - Helper functions manage user lifecycle:
-  - `userJoin(id, username, room)` - Add user to tracking
+  - `userJoin(id, username)` - Add user to tracking
   - `getCurrentUser(id)` - Look up user by socket ID
   - `userLeave(id)` - Remove user when disconnecting
-  - `getRoomUsers(room)` - Get all users in a specific room
+  - `getAllUsers()` - Get all connected users
 
 **Socket.IO Events (Server receives from clients):**
-- `joinRoom` - Client requests to join with `{ username, room }`
-  - Server checks if room is full
-  - Rejects with `roomFull` event if at capacity
-  - Accepts by calling `socket.join(room)` and sending `joinSuccess`
-  - Broadcasts updated `roomInfo` to everyone in room
+- `join` - Client requests to join with `{ username }`
+  - Server adds user to tracking
+  - Sends `joinSuccess` to that client
+  - Broadcasts updated `userList` to all connected clients
 - `sendMessage` - Client sends `{ message }`
-  - Server looks up which room the user is in
-  - Broadcasts `newMessage` to all players in that room only
+  - Server looks up the user's username
+  - Broadcasts `newMessage` to all connected clients
 - `disconnect` - Automatic when client closes
   - Server removes user from tracking
-  - Broadcasts updated `roomInfo` to remaining players in room
+  - Broadcasts updated `userList` to all remaining clients
 
 **Key Server Pattern:**
 ```javascript
 socket.on('eventFromClient', (data) => {
-    const user = getCurrentUser(socket.id);  // Find which room they're in
+    const user = getCurrentUser(socket.id);  // Find which user this is
     if (!user) return;
 
     // Process data, validate, update server state...
 
-    // Send to everyone in this room:
-    io.to(user.room).emit('eventToClients', { ... });
+    // Send to everyone:
+    io.emit('eventToClients', { ... });
 });
 ```
 
 ### Client-Side (index.html)
 
 **Join Screen:**
-- Two input fields: username and room name
-- On submit, sends `joinRoom` event to server
-- Listens for `roomFull` (error) or `joinSuccess` (accepted)
+- One input field: username
+- On submit, sends `join` event to server
+- Listens for `joinSuccess` (accepted)
 - Switches to game screen when accepted
 
 **Game Screen:**
-- **Room Info Panel**: Shows room name, player count, and player names
+- **Player Info Panel**: Shows total player count and all player names
 - **p5.js Canvas**: 600x500 canvas for rendering (currently just shows player list)
 - **Chat Panel**: Messaging interface to demonstrate Socket.IO communication
 
@@ -108,7 +104,7 @@ socket.on('eventName', (data) => {
 ## File Structure
 
 ```
-server.js        (~200 lines) - Node.js server with room management and Socket.IO
+server.js        (~215 lines) - Node.js server with user management and Socket.IO
 index.html       (~510 lines) - Join screen + p5.js client + messaging UI
 package.json     - Dependencies (express, socket.io only)
 CLAUDE.md        - This documentation file
@@ -125,7 +121,7 @@ All code is in these files - no build system or bundler required for simplicity.
 - The echo server automatically forwarded it to **all connected clients**
 - From student perspective, `socket.emit()` seemed to broadcast to everyone
 - Students couldn't see or control server logic
-- No concept of rooms or selective broadcasting
+- No validation or custom behavior possible
 
 **This Custom Server:**
 - Students still do `socket.emit('event', data)` on the client (same syntax!)
@@ -133,10 +129,9 @@ All code is in these files - no build system or bundler required for simplicity.
 - Students write server-side event handlers in `server.js`
 - Students decide what data to send and to whom:
   - `socket.emit()` on server = send to ONE client
-  - `io.to(room).emit()` = send to ALL in a room
-  - `io.emit()` = send to ALL on server
+  - `io.emit()` = send to ALL connected clients
 - Students can validate, modify, or reject client requests
-- Students control room isolation with `io.to(room).emit()`
+- Server is the "source of truth" for game state
 
 **Key Learning Transition:**
 - Client-side `socket.emit()` **always** goes to the server (never directly to other clients)
@@ -162,17 +157,8 @@ YOUR CUSTOM SERVER (this project):
                              │ • Who gets it?   │                 │
                              └──────────────────┘                 │
                                       │                           │
-                                      └─io.to(room).emit()────────┘
+                                      └────io.emit()──────────────┘
                                         (YOU control this!)
-```
-
-### Room Isolation
-
-Rooms are like separate "universes" - players in `room1` never receive events sent to `room2`.
-
-Server uses `io.to(roomName).emit()` to broadcast only to players in that room:
-```javascript
-io.to(user.room).emit('gameUpdate', { /* data */ });  // Only this room receives it
 ```
 
 ### Broadcasting Patterns
@@ -184,14 +170,9 @@ io.to(user.room).emit('gameUpdate', { /* data */ });  // Only this room receives
 socket.emit('privateMessage', { data });
 ```
 
-**Send to all clients in a room:**
+**Send to all connected clients:**
 ```javascript
-io.to(roomName).emit('roomUpdate', { data });
-```
-
-**Send to all clients on entire server (rare with rooms):**
-```javascript
-io.emit('serverAnnouncement', { data });
+io.emit('broadcast', { data });
 ```
 
 **Example - Complete Message Flow:**
@@ -206,15 +187,15 @@ socket.on('playerMove', (data) => {
     const user = getCurrentUser(socket.id);
     // Server validates, processes, decides...
 
-    io.to(user.room).emit('playerMoved', {
+    io.emit('playerMoved', {
         username: user.username,
         x: data.x,
         y: data.y
     });
-    // ↓ This goes to ALL clients in the room
+    // ↓ This goes to ALL connected clients
 });
 
-// CLIENTS in room (index.html):
+// ALL CLIENTS (index.html):
 socket.on('playerMoved', (data) => {
     // Update game state
     playerPositions[data.username] = { x: data.x, y: data.y };
@@ -252,8 +233,8 @@ socket.on('playerMove', (data) => {
 
     // Validate data.x and data.y...
 
-    // Broadcast to everyone in room
-    io.to(user.room).emit('playerMoved', {
+    // Broadcast to everyone
+    io.emit('playerMoved', {
         username: user.username,
         x: data.x,
         y: data.y
@@ -288,7 +269,7 @@ Students typically add:
 
 **Player Movement:**
 - Track each player's position on server
-- Broadcast position updates to room
+- Broadcast position updates to all players
 - Render all players on each client's canvas
 
 **Game Objects:**
@@ -317,48 +298,42 @@ Students typically add:
 ### Server Console
 ```
 Client connected: abc123
-User Alice attempting to join room: room1
-Alice joined room room1. Players: 1/3
-[room1] Alice: Hello!
-Client disconnected: Alice from room room1
+User Alice joining
+Alice joined. Total players: 1
+Alice: Hello!
+Client disconnected: Alice
 ```
 
 ### Client Console (Browser DevTools - F12)
 - Check `console.log()` output to see data flow
-- Inspect `players` array to see who's in room
+- Inspect `players` array to see who's connected
 - Monitor socket connection status
 - Check for errors in event handlers
 
 ### Common Issues
 
-**"Room full" when joining:**
-- Room already has `MAX_PLAYERS_PER_ROOM` players
-- Try a different room name or increase the limit in `server.js`
-
 **Messages not appearing:**
 - Check that client is sending to correct event name
 - Check that server is listening for that event name
-- Check that server is broadcasting back to the room
+- Check that server is broadcasting back
 - Check browser console for errors
 
-**Seeing other rooms' data:**
-- Server must use `io.to(user.room).emit()` not `io.emit()`
-- Check that `getCurrentUser()` is being called to find user's room
-
 **Player names not updating:**
-- The `roomInfo` event should trigger on join and disconnect
-- Check that client has `socket.on('roomInfo', ...)` handler
+- The `userList` event should trigger on join and disconnect
+- Check that client has `socket.on('userList', ...)` handler
+
+**Duplicate usernames:**
+- This starter allows duplicate names
+- Students can add username validation on server if desired
 
 ## Testing Checklist
 
-- [ ] Can join a room successfully
-- [ ] Room full error appears when 4th player tries to join
-- [ ] Player names appear in room info panel
+- [ ] Can join successfully
+- [ ] Player names appear in info panel
 - [ ] Player names appear on canvas
-- [ ] Chat messages appear for all players in room
-- [ ] Players in different rooms don't see each other's messages
-- [ ] When player disconnects, their name disappears from room info
-- [ ] Multiple rooms can exist simultaneously without interference
+- [ ] Chat messages appear for all players
+- [ ] When player disconnects, their name disappears
+- [ ] Multiple players can coexist
 
 ## Next Steps for Students
 
